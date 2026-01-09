@@ -16,9 +16,9 @@ window.Components.serverConfig = () => ({
             this.fetchServerConfig();
         }
 
-        // Watch local activeTab (from parent settings scope)
-        this.$watch('activeTab', (tab) => {
-            if (tab === 'server') {
+        // Watch local activeTab (from parent settings scope, skip initial trigger)
+        this.$watch('activeTab', (tab, oldTab) => {
+            if (tab === 'server' && oldTab !== undefined) {
                 this.fetchServerConfig();
             }
         });
@@ -164,9 +164,22 @@ window.Components.serverConfig = () => ({
         }
     },
 
-    // Generic debounced save method for numeric configs
-    async saveConfigField(fieldName, value, displayName) {
+    // Generic debounced save method for numeric configs with validation
+    async saveConfigField(fieldName, value, displayName, validator = null) {
         const store = Alpine.store('global');
+
+        // Validate input if validator provided
+        if (validator) {
+            const validation = window.Validators.validate(value, validator, true);
+            if (!validation.isValid) {
+                // Rollback to previous value
+                this.serverConfig[fieldName] = this.serverConfig[fieldName];
+                return;
+            }
+            value = validation.value;
+        } else {
+            value = parseInt(value);
+        }
 
         // Clear existing timer for this field
         if (this.debounceTimers[fieldName]) {
@@ -175,13 +188,13 @@ window.Components.serverConfig = () => ({
 
         // Optimistic update
         const previousValue = this.serverConfig[fieldName];
-        this.serverConfig[fieldName] = parseInt(value);
+        this.serverConfig[fieldName] = value;
 
         // Set new timer
         this.debounceTimers[fieldName] = setTimeout(async () => {
             try {
                 const payload = {};
-                payload[fieldName] = parseInt(value);
+                payload[fieldName] = value;
 
                 const { response, newPassword } = await window.utils.request('/api/config', {
                     method: 'POST',
@@ -203,27 +216,37 @@ window.Components.serverConfig = () => ({
                 this.serverConfig[fieldName] = previousValue;
                 store.showToast(`Failed to update ${displayName}: ` + e.message, 'error');
             }
-        }, 500); // 500ms debounce
+        }, window.AppConstants.INTERVALS.CONFIG_DEBOUNCE);
     },
 
-    // Individual toggle methods for each Advanced Tuning field
+    // Individual toggle methods for each Advanced Tuning field with validation
     toggleMaxRetries(value) {
-        this.saveConfigField('maxRetries', value, 'Max Retries');
+        const { MAX_RETRIES_MIN, MAX_RETRIES_MAX } = window.AppConstants.VALIDATION;
+        this.saveConfigField('maxRetries', value, 'Max Retries',
+            (v) => window.Validators.validateRange(v, MAX_RETRIES_MIN, MAX_RETRIES_MAX, 'Max Retries'));
     },
 
     toggleRetryBaseMs(value) {
-        this.saveConfigField('retryBaseMs', value, 'Retry Base Delay');
+        const { RETRY_BASE_MS_MIN, RETRY_BASE_MS_MAX } = window.AppConstants.VALIDATION;
+        this.saveConfigField('retryBaseMs', value, 'Retry Base Delay',
+            (v) => window.Validators.validateRange(v, RETRY_BASE_MS_MIN, RETRY_BASE_MS_MAX, 'Retry Base Delay'));
     },
 
     toggleRetryMaxMs(value) {
-        this.saveConfigField('retryMaxMs', value, 'Retry Max Delay');
+        const { RETRY_MAX_MS_MIN, RETRY_MAX_MS_MAX } = window.AppConstants.VALIDATION;
+        this.saveConfigField('retryMaxMs', value, 'Retry Max Delay',
+            (v) => window.Validators.validateRange(v, RETRY_MAX_MS_MIN, RETRY_MAX_MS_MAX, 'Retry Max Delay'));
     },
 
     toggleDefaultCooldownMs(value) {
-        this.saveConfigField('defaultCooldownMs', value, 'Default Cooldown');
+        const { DEFAULT_COOLDOWN_MIN, DEFAULT_COOLDOWN_MAX } = window.AppConstants.VALIDATION;
+        this.saveConfigField('defaultCooldownMs', value, 'Default Cooldown',
+            (v) => window.Validators.validateTimeout(v, DEFAULT_COOLDOWN_MIN, DEFAULT_COOLDOWN_MAX));
     },
 
     toggleMaxWaitBeforeErrorMs(value) {
-        this.saveConfigField('maxWaitBeforeErrorMs', value, 'Max Wait Threshold');
+        const { MAX_WAIT_MIN, MAX_WAIT_MAX } = window.AppConstants.VALIDATION;
+        this.saveConfigField('maxWaitBeforeErrorMs', value, 'Max Wait Threshold',
+            (v) => window.Validators.validateTimeout(v, MAX_WAIT_MIN, MAX_WAIT_MAX));
     }
 });

@@ -4,7 +4,7 @@
  */
 
 document.addEventListener('alpine:init', () => {
-    console.log('Registering app component...');
+    // App component registration
 
     // Main App Controller
     Alpine.data('app', () => ({
@@ -17,7 +17,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         init() {
-            console.log('App component initializing...');
+            // App component initialization
 
             // Theme setup
             document.documentElement.setAttribute('data-theme', 'black');

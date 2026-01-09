@@ -346,13 +346,21 @@
     </dialog>
 
     <!-- Scripts - Loading Order Matters! -->
-    <!-- 1. Utils (global helpers) -->
+    <!-- 1. Config & Utils (global helpers) -->
+    <script src="js/config/constants.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/utils/error-handler.js"></script>
+    <script src="js/utils/validators.js"></script>
+    <script src="js/utils/model-config.js"></script>
     <!-- 2. Alpine Stores (register alpine:init listeners) -->
     <script src="js/store.js"></script>
     <script src="js/data-store.js"></script>
     <script src="js/settings-store.js"></script>
     <!-- 3. Components (register to window.Components) -->
+    <!-- Dashboard modules (load before main dashboard) -->
+    <script src="js/components/dashboard/stats.js"></script>
+    <script src="js/components/dashboard/charts.js"></script>
+    <script src="js/components/dashboard/filters.js"></script>
     <script src="js/components/dashboard.js"></script>
     <script src="js/components/models.js"></script>
     <script src="js/components/account-manager.js"></script>

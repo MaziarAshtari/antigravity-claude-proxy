@@ -249,6 +249,7 @@ app.get('/account-limits', async (req, res) => {
         await ensureInitialized();
         const allAccounts = accountManager.getAllAccounts();
         const format = req.query.format || 'json';
+        const includeHistory = req.query.includeHistory === 'true';
 
         // Fetch quotas for each account in parallel
         const results = await Promise.allSettled(
@@ -429,8 +430,8 @@ app.get('/account-limits', async (req, res) => {
             accountStatus.accounts.map(a => [a.email, a])
         );
 
-        // Default: JSON format
-        res.json({
+        // Build response data
+        const responseData = {
             timestamp: new Date().toLocaleString(),
             totalAccounts: allAccounts.length,
             models: sortedModels,
@@ -468,7 +469,14 @@ app.get('/account-limits', async (req, res) => {
                     )
                 };
             })
-        });
+        };
+
+        // Optionally include usage history (for dashboard performance optimization)
+        if (includeHistory) {
+            responseData.history = usageStats.getHistory();
+        }
+
+        res.json(responseData);
     } catch (error) {
         res.status(500).json({
             status: 'error',

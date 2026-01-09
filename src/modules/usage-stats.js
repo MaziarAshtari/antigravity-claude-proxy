@@ -166,10 +166,24 @@ function setupRoutes(app) {
     });
 }
 
+/**
+ * Get usage history data
+ * @returns {object} History data sorted by timestamp
+ */
+function getHistory() {
+    const sortedKeys = Object.keys(history).sort();
+    const sortedData = {};
+    sortedKeys.forEach(key => {
+        sortedData[key] = history[key];
+    });
+    return sortedData;
+}
+
 export default {
     setupMiddleware,
     setupRoutes,
     track,
     getFamily,
-    getShortName
+    getShortName,
+    getHistory
 };

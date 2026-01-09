@@ -10,7 +10,18 @@ window.Components.claudeConfig = () => ({
     loading: false,
 
     init() {
-        this.fetchConfig();
+        // Only fetch config if this is the active sub-tab
+        if (this.activeTab === 'claude') {
+            this.fetchConfig();
+        }
+
+        // Watch local activeTab (from parent settings scope, skip initial trigger)
+        this.$watch('activeTab', (tab, oldTab) => {
+            if (tab === 'claude' && oldTab !== undefined) {
+                this.fetchConfig();
+            }
+        });
+
         this.$watch('$store.data.models', (val) => {
             this.models = val || [];
         });

@@ -37,33 +37,11 @@ window.Components.modelManager = () => ({
     },
 
     /**
-     * Update model configuration with authentication
+     * Update model configuration (delegates to shared utility)
      * @param {string} modelId - The model ID to update
      * @param {object} configUpdates - Configuration updates (pinned, hidden, alias, mapping)
      */
     async updateModelConfig(modelId, configUpdates) {
-        const store = Alpine.store('global');
-        try {
-            const { response, newPassword } = await window.utils.request('/api/models/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modelId, config: configUpdates })
-            }, store.webuiPassword);
-
-            if (newPassword) store.webuiPassword = newPassword;
-
-            if (!response.ok) {
-                throw new Error('Failed to update model config');
-            }
-
-            // Optimistic update
-            Alpine.store('data').modelConfig[modelId] = {
-                ...Alpine.store('data').modelConfig[modelId],
-                ...configUpdates
-            };
-            Alpine.store('data').computeQuotaRows();
-        } catch (e) {
-            store.showToast('Failed to update model config: ' + e.message, 'error');
-        }
+        return window.ModelConfigUtils.updateModelConfig(modelId, configUpdates);
     }
 });

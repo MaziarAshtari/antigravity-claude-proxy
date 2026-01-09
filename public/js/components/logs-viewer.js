@@ -70,7 +70,7 @@ window.Components.logsViewer = () => ({
                 this.logs.push(log);
 
                 // Limit log buffer
-                const limit = Alpine.store('settings')?.logLimit || 2000;
+                const limit = Alpine.store('settings')?.logLimit || window.AppConstants.LIMITS.DEFAULT_LOG_LIMIT;
                 if (this.logs.length > limit) {
                     this.logs = this.logs.slice(-limit);
                 }

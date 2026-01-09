@@ -12,6 +12,7 @@ document.addEventListener('alpine:init', () => {
         models: [], // Source of truth
         modelConfig: {}, // Model metadata (hidden, pinned, alias)
         quotaRows: [], // Filtered view
+        usageHistory: {}, // Usage statistics history (from /account-limits?includeHistory=true)
         loading: false,
         connectionStatus: 'connecting',
         lastUpdated: '-',
@@ -39,7 +40,10 @@ document.addEventListener('alpine:init', () => {
             try {
                 // Get password from global store
                 const password = Alpine.store('global').webuiPassword;
-                const { response, newPassword } = await window.utils.request('/account-limits', {}, password);
+
+                // Include history for dashboard (single API call optimization)
+                const url = '/account-limits?includeHistory=true';
+                const { response, newPassword } = await window.utils.request(url, {}, password);
 
                 if (newPassword) Alpine.store('global').webuiPassword = newPassword;
 
@@ -51,6 +55,11 @@ document.addEventListener('alpine:init', () => {
                     this.models = data.models;
                 }
                 this.modelConfig = data.modelConfig || {};
+
+                // Store usage history if included (for dashboard)
+                if (data.history) {
+                    this.usageHistory = data.history;
+                }
 
                 this.computeQuotaRows();
 
