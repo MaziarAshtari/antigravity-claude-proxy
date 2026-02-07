@@ -143,10 +143,34 @@ export async function updateServerPreset(currentName, updates) {
         }
     }
 
+    // Merge config updates if provided
+    if (updates.config && typeof updates.config === 'object') {
+        const allowedKeys = [
+            'maxRetries', 'retryBaseMs', 'retryMaxMs', 'defaultCooldownMs',
+            'maxWaitBeforeErrorMs', 'maxAccounts', 'globalQuotaThreshold',
+            'rateLimitDedupWindowMs', 'maxConsecutiveFailures', 'extendedCooldownMs',
+            'maxCapacityRetries', 'accountSelection'
+        ];
+        const existing = allPresets[index].config || {};
+        for (const key of allowedKeys) {
+            if (updates.config[key] !== undefined) {
+                if (key === 'accountSelection') {
+                    existing.accountSelection = { ...existing.accountSelection, ...updates.config.accountSelection };
+                } else {
+                    existing[key] = updates.config[key];
+                }
+            }
+        }
+        allPresets[index].config = existing;
+    }
+
+    const hasConfigChange = updates.config && Object.keys(updates.config).length > 0;
+    const hasNameChange = updates.name && updates.name !== currentName;
+
     try {
         await fs.mkdir(path.dirname(presetsPath), { recursive: true });
         await fs.writeFile(presetsPath, JSON.stringify(allPresets, null, 2), 'utf8');
-        logger.info(`[ServerPresets] Updated preset metadata: ${currentName}${updates.name && updates.name !== currentName ? ` → ${updates.name}` : ''}`);
+        logger.info(`[ServerPresets] Updated preset${hasConfigChange ? ' config' : ' metadata'}: ${currentName}${hasNameChange ? ` → ${updates.name}` : ''}`);
     } catch (error) {
         logger.error(`[ServerPresets] Failed to update preset:`, error.message);
         throw error;
