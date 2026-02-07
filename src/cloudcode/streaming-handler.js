@@ -391,6 +391,14 @@ export async function* sendMessageStream(anthropicRequest, accountManager, fallb
                 // Rate limited - already marked, notify strategy and continue to next account
                 accountManager.notifyRateLimit(account, model);
                 logger.info(`[CloudCode] Account ${account.email} rate-limited, trying next...`);
+
+                // CRITICAL FIX: If this is a duplicate rate limit (account was already known to be
+                // rate-limited), don't count it as a failed attempt. This prevents "Max retries exceeded"
+                // when thundering herd causes all accounts to be rate-limited and we're just cycling
+                // through known-bad accounts waiting for rate limits to expire.
+                if (error.message?.includes('RATE_LIMITED_DEDUP')) {
+                    attempt--;
+                }
                 continue;
             }
             if (isAuthError(error)) {
