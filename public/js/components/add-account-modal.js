@@ -10,6 +10,31 @@ window.Components.addAccountModal = () => ({
     authState: '',
     callbackInput: '',
     submitting: false,
+    _oauthListener: null,
+
+    init() {
+        // Allow other parts of the UI (and remote/VPS mode) to inject an OAuth URL + state
+        // so the user can complete the flow via Manual Mode.
+        this._oauthListener = (e) => {
+            const detail = e?.detail || {};
+            if (detail.url) this.authUrl = detail.url;
+            if (detail.state) this.authState = detail.state;
+            if (typeof detail.mode === 'string' && detail.mode.toLowerCase() === 'manual') {
+                // Ensure the modal and Manual Mode section are visible.
+                const dlg = document.getElementById('add_account_modal');
+                if (dlg && !dlg.open && dlg.showModal) {
+                    dlg.showModal();
+                }
+                Alpine.nextTick(() => {
+                    const manualDetails = document.querySelector('#add_account_modal details');
+                    if (manualDetails) manualDetails.open = true;
+                    const input = document.querySelector('#add_account_modal input[x-model=\"callbackInput\"]');
+                    if (input) input.focus();
+                });
+            }
+        };
+        window.addEventListener('ag-oauth-started', this._oauthListener);
+    },
 
     /**
      * Reset all state to initial values
@@ -38,7 +63,7 @@ window.Components.addAccountModal = () => ({
                 const {
                     response,
                     newPassword
-                } = await window.utils.request('/api/auth/url', {}, password);
+                } = await window.utils.request('/api/auth/url?mode=manual', {}, password);
                 if (newPassword) Alpine.store('global').webuiPassword = newPassword;
                 const data = await response.json();
                 if (data.status === 'ok') {

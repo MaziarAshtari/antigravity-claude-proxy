@@ -121,13 +121,29 @@ window.Components.accountManager = () => ({
         store.showToast(store.t('reauthenticating', { email: Redact.email(email) }), 'info');
         const password = store.webuiPassword;
         try {
-            const urlPath = `/api/auth/url?email=${encodeURIComponent(email)}`;
+            const isLoopback = window.utils?.isLoopbackHost
+                ? window.utils.isLoopbackHost(window.location.hostname)
+                : ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
+            const mode = isLoopback ? 'auto' : 'manual';
+
+            const params = new URLSearchParams();
+            params.set('email', email);
+            params.set('mode', mode);
+            const urlPath = `/api/auth/url?${params.toString()}`;
             const { response, newPassword } = await window.utils.request(urlPath, {}, password);
             if (newPassword) store.webuiPassword = newPassword;
 
             const data = await response.json();
             if (data.status === 'ok') {
+                try {
+                    window.dispatchEvent(new CustomEvent('ag-oauth-started', {
+                        detail: { url: data.url, state: data.state, mode }
+                    }));
+                } catch {}
                 window.open(data.url, 'google_oauth', 'width=600,height=700,scrollbars=yes');
+                if (mode === 'manual') {
+                    store.showToast(`${store.t('manualMode')}: ${store.t('pasteCallbackLabel')}`, 'info');
+                }
             } else {
                 store.showToast(data.error || store.t('authUrlFailed'), 'error');
             }

@@ -1140,58 +1140,95 @@ export function mountWebUI(app, dirname, accountManager) {
                 }
             }
 
+            // If the WebUI is being accessed from another machine (VPS/remote),
+            // the localhost redirect won't hit this server. In that case we should
+            // skip auto-callback and use manual completion (/api/auth/complete).
+            const modeRaw = String(req.query.mode || '').toLowerCase();
+            const manualOnly = modeRaw === 'manual' || modeRaw === 'no-callback' || modeRaw === 'nocallback' || modeRaw === 'remote';
+
+            const loginHint = req.query.email ? String(req.query.email) : null;
+
             // Generate OAuth URL using default redirect URI (localhost:51121)
-            const { url, verifier, state } = getAuthorizationUrl();
+            const { url, verifier, state } = getAuthorizationUrl(null, { loginHint });
 
-            // Start callback server on port 51121 (same as CLI)
-            const { promise: serverPromise, abort: abortServer } = startCallbackServer(state, 120000); // 2 min timeout
-
-            // Store the flow data
-            pendingOAuthFlows.set(state, {
-                serverPromise,
-                abortServer,
+            const flowRecord = {
+                serverPromise: null,
+                abortServer: null,
                 verifier,
                 state,
                 timestamp: Date.now()
-            });
+            };
 
-            // Start async handler for the OAuth callback
-            serverPromise
-                .then(async (code) => {
-                    try {
-                        logger.info('[WebUI] Received OAuth callback, completing flow...');
-                        const accountData = await completeOAuthFlow(code, verifier);
+            if (!manualOnly) {
+                // Start callback server on port 51121 (same as CLI)
+                const { promise: serverPromise, abort: abortServer } = startCallbackServer(state, 120000); // 2 min timeout
+                flowRecord.serverPromise = serverPromise;
+                flowRecord.abortServer = abortServer;
 
-                        // Add or update the account
-                        // Note: Don't set projectId here - it will be discovered and stored
-                        // in the refresh token via getProjectForAccount() on first use
-                        await addAccount({
-                            email: accountData.email,
-                            refreshToken: accountData.refreshToken,
-                            source: 'oauth'
-                        });
+                // Start async handler for the OAuth callback
+                serverPromise
+                    .then(async (code) => {
+                        try {
+                            logger.info('[WebUI] Received OAuth callback, completing flow...');
+                            const accountData = await completeOAuthFlow(code, verifier);
 
-                        // Reload AccountManager to pick up the new account
-                        await accountManager.reload();
+                            // Add or update the account
+                            // Note: Don't set projectId here - it will be discovered and stored
+                            // in the refresh token via getProjectForAccount() on first use
+                            await addAccount({
+                                email: accountData.email,
+                                refreshToken: accountData.refreshToken,
+                                source: 'oauth'
+                            });
 
-                        logger.success(`[WebUI] Account ${accountData.email} added successfully`);
-                    } catch (err) {
-                        logger.error('[WebUI] OAuth flow completion error:', err);
-                    } finally {
+                            // Reload AccountManager to pick up the new account
+                            await accountManager.reload();
+
+                            logger.success(`[WebUI] Account ${accountData.email} added successfully`);
+                        } catch (err) {
+                            logger.error('[WebUI] OAuth flow completion error:', err);
+                        } finally {
+                            pendingOAuthFlows.delete(state);
+                        }
+                    })
+                    .catch((err) => {
+                        // Only log if not aborted (manual completion causes this)
+                        if (!err.message?.includes('aborted')) {
+                            logger.error('[WebUI] OAuth callback server error:', err);
+                        }
                         pendingOAuthFlows.delete(state);
-                    }
-                })
-                .catch((err) => {
-                    // Only log if not aborted (manual completion causes this)
-                    if (!err.message?.includes('aborted')) {
-                        logger.error('[WebUI] OAuth callback server error:', err);
-                    }
-                    pendingOAuthFlows.delete(state);
-                });
+                    });
+            }
 
-            res.json({ status: 'ok', url, state });
+            // Store the flow data (used by /api/auth/complete manual completion)
+            pendingOAuthFlows.set(state, flowRecord);
+
+            res.json({ status: 'ok', url, state, mode: manualOnly ? 'manual' : 'auto' });
         } catch (error) {
             logger.error('[WebUI] Error generating auth URL:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
+     * POST /api/auth/cancel - Cancel an in-progress OAuth flow (stops callback server if running)
+     */
+    app.post('/api/auth/cancel', async (req, res) => {
+        try {
+            const { state } = req.body || {};
+            if (!state) {
+                return res.status(400).json({ status: 'error', error: 'Missing state' });
+            }
+
+            const flowData = pendingOAuthFlows.get(state);
+            if (flowData?.abortServer) {
+                flowData.abortServer();
+            }
+            pendingOAuthFlows.delete(state);
+
+            res.json({ status: 'ok' });
+        } catch (error) {
+            logger.error('[WebUI] OAuth cancel error:', error);
             res.status(500).json({ status: 'error', error: error.message });
         }
     });

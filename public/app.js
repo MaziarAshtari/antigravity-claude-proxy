@@ -129,9 +129,18 @@ document.addEventListener('alpine:init', () => {
         async addAccountWeb(reAuthEmail = null) {
             const password = Alpine.store('global').webuiPassword;
             try {
-                const urlPath = reAuthEmail
-                    ? `/api/auth/url?email=${encodeURIComponent(reAuthEmail)}`
-                    : '/api/auth/url';
+                const isLoopback = window.utils?.isLoopbackHost
+                    ? window.utils.isLoopbackHost(window.location.hostname)
+                    : ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
+
+                // Auto mode only works when the browser and server are on the same machine
+                // (because Google redirects to http://localhost:PORT/...).
+                const mode = isLoopback ? 'auto' : 'manual';
+
+                const params = new URLSearchParams();
+                if (reAuthEmail) params.set('email', reAuthEmail);
+                params.set('mode', mode);
+                const urlPath = `/api/auth/url?${params.toString()}`;
 
                 const { response, newPassword } = await window.utils.request(urlPath, {}, password);
                 if (newPassword) Alpine.store('global').webuiPassword = newPassword;
@@ -142,8 +151,26 @@ document.addEventListener('alpine:init', () => {
                     // Show info toast that OAuth is in progress
                     Alpine.store('global').showToast(Alpine.store('global').t('oauthInProgress'), 'info');
 
+                    // Publish auth URL + state so Manual Mode can be used as a fallback (or primary on VPS).
+                    try {
+                        window.dispatchEvent(new CustomEvent('ag-oauth-started', {
+                            detail: { url: data.url, state: data.state, mode }
+                        }));
+                    } catch {
+                        // Ignore CustomEvent failures (older browsers) - Manual Mode can still fetch its own URL.
+                    }
+
                     // Open OAuth window
                     const oauthWindow = window.open(data.url, 'google_oauth', 'width=600,height=700,scrollbars=yes');
+
+                    // Manual/VPS mode: user must paste the callback URL/code (localhost redirect can't hit the VPS).
+                    if (mode === 'manual') {
+                        Alpine.store('global').showToast(
+                            `${Alpine.store('global').t('manualMode')}: ${Alpine.store('global').t('pasteCallbackLabel')}`,
+                            'info'
+                        );
+                        return;
+                    }
 
                     // Poll for account changes instead of relying on postMessage
                     // (since OAuth callback is now on port 51121, not this server)
@@ -151,6 +178,8 @@ document.addEventListener('alpine:init', () => {
                     let pollCount = 0;
                     const maxPolls = 60; // 2 minutes (2 second intervals)
                     let cancelled = false;
+                    const authState = data.state;
+                    const authUrl = data.url;
 
                     // Show progress modal
                     Alpine.store('global').oauthProgress = {
@@ -165,6 +194,12 @@ document.addEventListener('alpine:init', () => {
                             if (oauthWindow && !oauthWindow.closed) {
                                 oauthWindow.close();
                             }
+                            // Best-effort: stop the callback server early.
+                            window.utils.request('/api/auth/cancel', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ state: authState })
+                            }, Alpine.store('global').webuiPassword).catch(() => {});
                         }
                     };
 
@@ -182,6 +217,12 @@ document.addEventListener('alpine:init', () => {
                             clearInterval(pollInterval);
                             Alpine.store('global').oauthProgress.active = false;
                             Alpine.store('global').showToast(Alpine.store('global').t('oauthWindowClosed'), 'warning');
+                            // Offer Manual Mode fallback with the same state/verifier.
+                            try {
+                                window.dispatchEvent(new CustomEvent('ag-oauth-started', {
+                                    detail: { url: authUrl, state: authState, mode: 'manual' }
+                                }));
+                            } catch {}
                             return;
                         }
 
@@ -214,6 +255,12 @@ document.addEventListener('alpine:init', () => {
                                 Alpine.store('global').t('oauthTimeout'),
                                 'warning'
                             );
+                            // Offer Manual Mode fallback with the same state/verifier.
+                            try {
+                                window.dispatchEvent(new CustomEvent('ag-oauth-started', {
+                                    detail: { url: authUrl, state: authState, mode: 'manual' }
+                                }));
+                            } catch {}
                         }
                     }, 2000); // Poll every 2 seconds
                 } else {

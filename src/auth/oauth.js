@@ -63,11 +63,13 @@ function generatePKCE() {
  * Returns the URL and the PKCE verifier (needed for token exchange)
  *
  * @param {string} [customRedirectUri] - Optional custom redirect URI (e.g. for WebUI)
+ * @param {{loginHint?: string|null}} [options] - Optional extra parameters
  * @returns {{url: string, verifier: string, state: string}} Auth URL and PKCE data
  */
-export function getAuthorizationUrl(customRedirectUri = null) {
+export function getAuthorizationUrl(customRedirectUri = null, options = {}) {
     const { verifier, challenge } = generatePKCE();
     const state = crypto.randomBytes(16).toString('hex');
+    const loginHint = options?.loginHint ? String(options.loginHint) : null;
 
     const params = new URLSearchParams({
         client_id: OAUTH_CONFIG.clientId,
@@ -80,6 +82,10 @@ export function getAuthorizationUrl(customRedirectUri = null) {
         code_challenge_method: 'S256',
         state: state
     });
+
+    if (loginHint) {
+        params.set('login_hint', loginHint);
+    }
 
     return {
         url: `${OAUTH_CONFIG.authUrl}?${params.toString()}`,
