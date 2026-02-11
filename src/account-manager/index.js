@@ -460,7 +460,7 @@ export class AccountManager {
                 // Include quota threshold settings
                 quotaThreshold: a.quotaThreshold,
                 modelQuotaThresholds: a.modelQuotaThresholds || {},
-                hasFingerprint: !!a.fingerprint
+                fingerprint: a.fingerprint
             }))
         };
     }
@@ -581,10 +581,6 @@ export class AccountManager {
             // account.fingerprintHistory is guaranteed to exist if we are here
             account.fingerprintHistory.unshift(historyEntry);
         }
-
-        // Remove the restored entry from history (shifted by 1 if we just unshifted)
-        const removeIndex = account.fingerprint ? historyIndex + 1 : historyIndex;
-        account.fingerprintHistory.splice(removeIndex, 1);
 
         // Restore
         account.fingerprint = { ...restoredEntry.fingerprint, createdAt: Date.now() };

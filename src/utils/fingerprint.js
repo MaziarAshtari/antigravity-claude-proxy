@@ -121,7 +121,7 @@ export function buildFingerprintHeaders(fingerprint) {
 export function updateFingerprintVersion(fingerprint) {
     if (!fingerprint || !fingerprint.userAgent) return fingerprint;
 
-    const match = fingerprint.userAgent.match(/^antigravity\/\S+ (.+)$/);
+    const match = fingerprint.userAgent.match(/^antigravity\/[\d.]+ (.+)$/);
     if (match) {
         const platformArch = match[1];
         const expectedUserAgent = `antigravity/${ANTIGRAVITY_VERSION} ${platformArch}`;

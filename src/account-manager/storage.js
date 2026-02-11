@@ -84,8 +84,7 @@ export function loadDefaultAccount(dbPath) {
                 email: authData.email || 'default@antigravity',
                 source: 'database',
                 lastUsed: null,
-                modelRateLimits: {},
-                fingerprint: generateFingerprint()
+                modelRateLimits: {}
             };
 
             const tokenCache = new Map();
